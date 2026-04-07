@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# batstack uninstall — remove skill symlinks from ~/.claude/skills/
+set -e
+
+BATSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILLS_DIR="$HOME/.claude/skills"
+
+removed=()
+for skill_dir in "$BATSTACK_DIR"/skills/*/; do
+  [ -f "$skill_dir/SKILL.md" ] || continue
+  skill_name="$(basename "$skill_dir")"
+  target="$SKILLS_DIR/$skill_name"
+
+  # only remove if the SKILL.md symlink points back into batstack
+  if [ -L "$target/SKILL.md" ]; then
+    link_target="$(readlink "$target/SKILL.md")"
+    case "$link_target" in
+      "$BATSTACK_DIR"/*)
+        rm "$target/SKILL.md"
+        rmdir "$target" 2>/dev/null || true
+        removed+=("$skill_name")
+        ;;
+    esac
+  fi
+done
+
+if [ ${#removed[@]} -gt 0 ]; then
+  echo "batstack: removed ${#removed[@]} skills — ${removed[*]}"
+else
+  echo "batstack: no batstack skills found to remove"
+fi

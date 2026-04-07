@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# batstack setup — symlink skills into ~/.claude/skills/
+set -e
+
+BATSTACK_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILLS_DIR="$HOME/.claude/skills"
+
+mkdir -p "$SKILLS_DIR"
+
+linked=()
+conflicts=()
+for skill_dir in "$BATSTACK_DIR"/skills/*/; do
+  [ -f "$skill_dir/SKILL.md" ] || continue
+  skill_name="$(basename "$skill_dir")"
+  target="$SKILLS_DIR/$skill_name"
+
+  # refuse to overwrite if the target exists and isn't ours
+  if [ -e "$target" ] || [ -L "$target" ]; then
+    if [ -L "$target/SKILL.md" ]; then
+      link_target="$(readlink "$target/SKILL.md")"
+      case "$link_target" in
+        "$BATSTACK_DIR"/*) ;; # our own symlink from a previous run, safe to overwrite
+        *)
+          conflicts+=("$skill_name")
+          continue
+          ;;
+      esac
+    elif [ -f "$target/SKILL.md" ]; then
+      # real file, not a symlink — belongs to something else
+      conflicts+=("$skill_name")
+      continue
+    fi
+  fi
+
+  mkdir -p "$target"
+  [ -L "$target/SKILL.md" ] && rm "$target/SKILL.md"
+  ln -snf "$skill_dir/SKILL.md" "$target/SKILL.md"
+  linked+=("$skill_name")
+done
+
+if [ ${#conflicts[@]} -gt 0 ]; then
+  echo "batstack: CONFLICT — these skills already exist and don't belong to batstack:" >&2
+  for c in "${conflicts[@]}"; do
+    echo "  ~/.claude/skills/$c" >&2
+  done
+  echo "uninstall the other skill pack first, then re-run setup." >&2
+  exit 1
+fi
+
+if [ ${#linked[@]} -gt 0 ]; then
+  echo "batstack: linked ${#linked[@]} skills — ${linked[*]}"
+else
+  echo "batstack: no skills found in $BATSTACK_DIR/skills/"
+  echo "  (this is expected if you haven't built any yet)"
+fi
